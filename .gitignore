@@ -1,0 +1,45 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+.venv
+
+# Environment
+.env
+.env.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Data (optional - uncomment if you don't want to commit data)
+# data/raw/*
+# data/processed/*
+# !data/raw/.gitkeep
+# !data/processed/.gitkeep
+
+# Docker
+docker-compose.override.yml
+
+# Logs
+*.log
+logs/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Models (optional)
+# models/*.pkl
+# models/*.h5

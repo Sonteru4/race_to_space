@@ -1,0 +1,135 @@
+version: "3.9"
+name: rsix-stack
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: rsix-postgres
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    networks: [rsix-net]
+
+  neo4j:
+    image: neo4j:5.25.1-community
+    container_name: rsix-neo4j
+    restart: unless-stopped
+    environment:
+      NEO4J_AUTH: "neo4j/rsix_graph_2024"
+      NEO4J_server_default__listen__address: 0.0.0.0
+      NEO4J_server_http_listen__address: 0.0.0.0:7474
+      NEO4J_server_bolt_listen__address: 0.0.0.0:7687
+      NEO4J_PLUGINS: '["apoc"]'
+    ports:
+      - "7474:7474"
+      - "7687:7687"
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:7474"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+    volumes:
+      - neo4jdata:/data
+      - neo4jlogs:/logs
+    networks: [rsix-net]
+
+  mlflow:
+    image: ghcr.io/mlflow/mlflow:latest
+    container_name: rsix-mlflow
+    restart: unless-stopped
+    env_file: .env
+    command: >
+      mlflow server
+      --host 0.0.0.0
+      --port ${MLFLOW_PORT}
+      --backend-store-uri ${MLFLOW_BACKEND_URI}
+      --default-artifact-root ${MLFLOW_ARTIFACTS_URI}
+    ports:
+      - "5001:5001"
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:5001"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+    volumes:
+      - mlflow_backend:/mlflow/backend
+      - mlflow_artifacts:/mlflow/artifacts
+    networks: [rsix-net]
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    container_name: rsix-api
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+      MLFLOW_TRACKING_URI: ${MLFLOW_TRACKING_URI}
+      NEO4J_URI: ${NEO4J_URI}
+      NEO4J_PASSWORD: ${NEO4J_PASSWORD}
+      LOG_LEVEL: ${LOG_LEVEL}
+      LOG_FORMAT: ${LOG_FORMAT}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      mlflow:
+        condition: service_started
+      neo4j:
+        condition: service_started
+    ports:
+      - "8000:8000"
+    networks: [rsix-net]
+
+  streamlit:
+    build:
+      context: .
+      dockerfile: Dockerfile.streamlit
+    container_name: rsix-streamlit
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      API_URL: http://api:8000
+      LOG_LEVEL: ${LOG_LEVEL}
+    depends_on:
+      api:
+        condition: service_started
+    ports:
+      - "8501:8501"
+    networks: [rsix-net]
+
+  jupyter:
+    build:
+      context: .
+      dockerfile: Dockerfile.jupyter
+    container_name: rsix-jupyter
+    restart: unless-stopped
+    env_file: .env
+    volumes:
+      - ./:/app
+    working_dir: /app
+    ports:
+      - "8888:8888"
+    networks: [rsix-net]
+
+networks:
+  rsix-net:
+
+volumes:
+  pgdata:
+  neo4jdata:
+  neo4jlogs:
+  mlflow_backend:
+  mlflow_artifacts:
